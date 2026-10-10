@@ -1,0 +1,8 @@
+.env
+.env.*
+*.env
+mssql-connections/
+!.env.example
+__pycache__/
+*.pyc
+.venv/

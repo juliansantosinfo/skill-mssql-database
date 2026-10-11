@@ -19,13 +19,20 @@ compatibility: Linux, Windows e macOS; Python 3.10+; python-dotenv e sqlparse; s
 5. DDL/DML: por padrão execute `execute` sem `--apply` (prévia transacional com ROLLBACK). Após aprovação use `--apply --ack confirmed`. Prévia não reverte efeitos externos de triggers, chamadas externas ou sequências. Algumas operações não são compatíveis com transação; bloqueie-as no wrapper e use procedimento específico aprovado.
 6. `query` destina-se a SELECT/CTE de leitura. A validação lexical é conservadora, mas **não é sandbox de segurança SQL**: funções, views e SQL malicioso podem ter efeitos colaterais. Use conta de privilégios mínimos, especialmente read-only para análise, e revise SQL obtido de entradas não confiáveis.
 7. Não execute apenas por ter sido solicitado para **gerar** SQL ou explicar uma solução. Relate resultados reais: servidor/banco, ação, confirmação, linhas quando disponíveis, commit/rollback, limites e testes.
+8. **Diagnóstico de dependências e autorização para instalação**:
+   - O agente deve verificar os pré-requisitos antes da execução ou caso ocorra erro de conexão/driver:
+     - **Pacotes Python**: verificar `python-dotenv`, `sqlparse` e `pyodbc`. Se ausentes, solicitar autorização ao usuário antes de rodar `pip install -r requirements.txt`.
+     - **Drivers nativos do SO**: o pacote `pyodbc` do Python necessita do driver nativo instalado no sistema operacional. Verifique os drivers com `python3 -c "import pyodbc; print(pyodbc.drivers())"`. Se o driver configurado (padrão `ODBC Driver 18 for SQL Server`) não estiver presente, ou se `sqlcmd` não estiver no `PATH`, **nunca tente instalar sem consentimento**.
+     - **Comunicação e autorização**: informe claramente ao usuário qual dependência de sistema está faltando, apresente os comandos exatos de instalação para a distribuição/sistema detectado (consultando `references/OPERATIONS.md`) e **peça autorização explícita** para executar a instalação ou oriente o usuário a rodar no terminal.
+     - **Certificados TLS em containers Docker / Dev**: se a conexão falhar com erro de SSL ou certificado autoassinado (comum em Docker e ambientes locais), oriente o usuário a definir `MSSQL_TRUST_SERVER_CERTIFICATE=yes` no arquivo `.env`.
 
 ## Ferramentas locais
-- Detecte `sqlcmd` no `PATH` ou via `MSSQL_SQLCMD_PATH`; `MSSQL_CLIENT=auto` prefere `sqlcmd` quando a configuração TLS padrão é compatível, senão `pyodbc`. Não instale binários, drivers ou altere PATH sem autorização.
-- `sqlcmd` deve ser a variante ODBC compatível com `-N -b -i -S -U -d`. Existem variantes (como Go sqlcmd) com opções distintas; se for incompatível, selecione `MSSQL_CLIENT=python` e informe a necessidade de pyodbc + driver ODBC. Não desative a verificação TLS só para conectar.
+- Detecte `sqlcmd` no `PATH` ou via `MSSQL_SQLCMD_PATH`; `MSSQL_CLIENT=auto` prefere `sqlcmd` quando a configuração TLS padrão é compatível, senão `pyodbc`. Nunca instale binários, drivers do SO ou altere o sistema sem autorização explícita do usuário.
+- Ao identificar a ausência de `sqlcmd` ou do driver Microsoft ODBC (`msodbcsql18`), informe o usuário, apresente as instruções/comandos apropriados para a plataforma e solicite autorização antes de qualquer instalação.
+- `sqlcmd` deve ser a variante ODBC compatível com `-N -b -i -S -U -d`. Existem variantes (como Go sqlcmd) com opções distintas; se for incompatível, selecione `MSSQL_CLIENT=python` e informe a necessidade de pyodbc + driver ODBC. Não desative a verificação TLS em produção sem avaliar risco.
 - `sqlcmd` lê a senha de `SQLCMDPASSWORD` **somente no processo filho**; o SQL é enviado por arquivo temporário com permissões restritas e excluído em seguida. A saída desse backend é texto limitado (não JSON estruturado por linha).
-- `pyodbc` exige Microsoft ODBC Driver 18 (ou `MSSQL_ODBC_DRIVER` personalizado), mantém senha na memória do processo e fornece saída JSON limitada. Em Linux/macOS o driver depende de instalação separada no host.
-- Consulte `references/OPERATIONS.md` para exemplos e limitações.
+- `pyodbc` exige Microsoft ODBC Driver 18 (ou `MSSQL_ODBC_DRIVER` personalizado), mantém senha na memória do processo e fornece saída JSON limitada. Em Linux/macOS o driver depende de instalação de pacote nativo no host (`msodbcsql18`).
+- Consulte `references/OPERATIONS.md` para comandos de instalação por sistema operacional e resolução de problemas.
 
 ## Interface do executor
 ```bash

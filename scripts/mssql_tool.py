@@ -119,7 +119,25 @@ def via_sqlcmd(args, cfg, sql):
         completed = subprocess.run(cmd + [filename], env=env, capture_output=True, text=True,
                                    encoding='utf-8', errors='replace', timeout=cfg['timeout'] + 15)
         if completed.returncode:
-            output({'ok': False, 'backend': 'sqlcmd', 'error': 'Falha na consulta/execução; detalhes potencialmente sensíveis omitidos', 'exit_code': completed.returncode})
+            err_text = (completed.stderr or completed.stdout or '').strip()
+            if cfg['password']:
+                err_text = err_text.replace(cfg['password'], '******')
+            err_text = re.sub(r'(?i)(PWD=)[^;]*', r'\1******', err_text)
+            hint = None
+            if any(k in err_text.lower() for k in ('certificate verify failed', 'self signed certificate', 'tls_process_server_certificate')):
+                hint = 'Falha de validação SSL/TLS (certificado autoassinado). sqlcmd padrão rejeita certificados autoassinados sem -C; utilize MSSQL_CLIENT=python com MSSQL_TRUST_SERVER_CERTIFICATE=yes.'
+            elif 'login failed' in err_text.lower():
+                hint = 'Falha de autenticação no SQL Server. Verifique MSSQL_USER e MSSQL_PASSWORD no .env.'
+            err_payload = {
+                'ok': False,
+                'backend': 'sqlcmd',
+                'error': 'Falha na consulta/execução via sqlcmd',
+                'exit_code': completed.returncode,
+                'details': err_text[:400]
+            }
+            if hint:
+                err_payload['hint'] = hint
+            output(err_payload)
             return 1
         raw = completed.stdout
         output({'ok': True, 'backend': 'sqlcmd', 'mode': args.command,
@@ -141,8 +159,17 @@ def via_pyodbc(args, cfg, sql):
     try:
         import pyodbc
     except ImportError as e:
-        raise ValueError('Instale pyodbc e um Microsoft ODBC Driver SQL Server compatível') from e
+        raise ValueError('Instale pyodbc e um Microsoft ODBC Driver SQL Server compatível: pip install pyodbc') from e
     driver = os.getenv('MSSQL_ODBC_DRIVER', 'ODBC Driver 18 for SQL Server')
+    installed_drivers = pyodbc.drivers()
+    if driver not in installed_drivers:
+        drivers_list = ', '.join(f'"{d}"' for d in installed_drivers) if installed_drivers else 'nenhum'
+        raise ValueError(
+            f'Driver ODBC "{driver}" não encontrado no sistema operacional. '
+            f'Drivers instalados: [{drivers_list}]. '
+            'pip install pyodbc instala apenas o pacote Python. O driver nativo precisa ser instalado no SO '
+            '(ex: pacote msodbcsql18 via apt/yum/brew). Consulte references/OPERATIONS.md.'
+        )
     # escape ODBC brace values, keep password out of command line.
     def brace(v):
         return '{' + str(v).replace('}', '}}') + '}'
@@ -187,8 +214,30 @@ def via_pyodbc(args, cfg, sql):
             raise
         finally:
             cn.close()
-    except pyodbc.Error:
-        output({'ok': False, 'backend': 'python', 'error': 'Falha ODBC/SQL Server; detalhes omitidos para proteger credenciais e dados'})
+    except pyodbc.Error as e:
+        raw_msg = str(e)
+        if cfg['password']:
+            raw_msg = raw_msg.replace(cfg['password'], '******')
+        raw_msg = re.sub(r'(?i)(PWD=)[^;]*', r'\1******', raw_msg)
+        hint = None
+        lower_msg = raw_msg.lower()
+        if any(k in lower_msg for k in ('certificate verify failed', 'self signed certificate', 'ssl provider', 'tls_process_server_certificate')):
+            hint = 'Falha de validação SSL/TLS (certificado autoassinado detectado). Para containers Docker ou desenvolvimento local, defina MSSQL_TRUST_SERVER_CERTIFICATE=yes no seu arquivo .env.'
+        elif 'login failed' in lower_msg:
+            hint = f'Falha de autenticação no SQL Server para o usuário "{cfg["user"]}". Verifique MSSQL_USER e MSSQL_PASSWORD no .env.'
+        elif 'cannot open database' in lower_msg or 'does not exist' in lower_msg:
+            hint = f'Banco de dados "{cfg["db"]}" não encontrado ou inacessível no servidor.'
+        elif any(k in lower_msg for k in ('timeout', 'network-related', 'connection refused', 'unable to complete network connection')):
+            hint = f'Não foi possível conectar ao host {cfg["host"]}:{cfg["port"]}. Verifique se o SQL Server está em execução e acessível.'
+        err_payload = {
+            'ok': False,
+            'backend': 'python',
+            'error': 'Falha na conexão ou execução ODBC/SQL Server',
+            'details': raw_msg[:400]
+        }
+        if hint:
+            err_payload['hint'] = hint
+        output(err_payload)
         return 1
 
 

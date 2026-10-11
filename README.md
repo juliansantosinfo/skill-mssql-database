@@ -6,7 +6,10 @@ Skill Agent Skills com executor multiplataforma **Linux / Windows / macOS**, SQL
 
 1. Copie a pasta para `.agents/skills/mssql-database/` (ou diretório de skills do agente).
 2. `python -m pip install -r .agents/skills/mssql-database/requirements.txt`
-3. Instale `sqlcmd` ODBC no host **ou** `pyodbc` + Microsoft ODBC Driver 18 (dependência opcional, caso `sqlcmd` não esteja disponível).
+3. Instale o driver nativo do sistema operacional:
+   - Se utilizar `pyodbc`: `pip install pyodbc` requer o **Microsoft ODBC Driver 18 for SQL Server** (`msodbcsql18`) instalado no SO.
+   - Se utilizar `sqlcmd`: utilitário `sqlcmd` ODBC no host (`mssql-tools18`).
+   - Consulte `references/OPERATIONS.md` para os comandos de instalação por distribuição (Ubuntu/Debian, RHEL, macOS, Windows).
 4. Crie um `.env` com base em `.env.example` na raiz do **projeto** ou, se ausente, na raiz da **skill**. Não versione credenciais.
 5. `python .agents/skills/mssql-database/scripts/mssql_tool.py ping`
 

@@ -1,39 +1,36 @@
 # mssql-database — Skill para Microsoft SQL Server
 
-Skill Agent Skills com executor multiplataforma **Linux / Windows / macOS**, SQL Server local, remoto ou Docker, DQL/DML/DDL e políticas de confirmação.
+Skill leve para conexão e execução direta de comandos SQL Server (local, Docker ou remoto) via Python e `pyodbc`.
 
 ## Instalação
 
-1. Copie a pasta para `.agents/skills/mssql-database/` (ou diretório de skills do agente).
-2. `python -m pip install -r .agents/skills/mssql-database/requirements.txt`
-3. Instale o driver nativo do sistema operacional:
-   - Se utilizar `pyodbc`: `pip install pyodbc` requer o **Microsoft ODBC Driver 18 for SQL Server** (`msodbcsql18`) instalado no SO.
-   - Se utilizar `sqlcmd`: utilitário `sqlcmd` ODBC no host (`mssql-tools18`).
-   - Consulte `references/OPERATIONS.md` para os comandos de instalação por distribuição (Ubuntu/Debian, RHEL, macOS, Windows).
-4. Crie um `.env` com base em `.env.example` na raiz do **projeto** ou, se ausente, na raiz da **skill**. Não versione credenciais.
-5. `python .agents/skills/mssql-database/scripts/mssql_tool.py ping`
+1. Instale as dependências Python:
+   ```bash
+   pip install -r requirements.txt
+   ```
+2. Instale o driver ODBC nativo no sistema operacional (**Microsoft ODBC Driver 18 for SQL Server**):
+   - **Ubuntu/Debian**:
+     ```bash
+     curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg
+     curl -fsSL https://packages.microsoft.com/config/ubuntu/24.04/prod.list | sudo tee /etc/apt/sources.list.d/mssql-release.list
+     sudo apt-get update
+     sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc-dev
+     ```
+   - **macOS**: `brew install msodbcsql18`
+   - **Windows**: Baixe e instale o instalador `.msi` oficial da Microsoft.
 
-## Prioridade do arquivo .env
+3. Configure o arquivo `.env` na raiz do seu projeto (veja `.env.example`).
+   > **Nota para Docker**: Se o SQL Server estiver em um container local com certificado autoassinado, configure `MSSQL_TRUST_SERVER_CERTIFICATE=yes` no `.env`.
 
-1. `--env-file ./caminho/arquivo.env` (explícito)
-2. `./.env` na raiz de execução do projeto
-3. `.env` na raiz da skill
-
-Carrega apenas um arquivo. Variáveis já definidas no processo prevalecem.
-
-## Descoberta de instâncias e geração de .env
-
-Para identificar automaticamente instâncias e databases Microsoft SQL Server no host (instalações locais e containers Docker) e gerar os arquivos `.env` individuais no diretório `./mssql-connections/`, consulte e utilize o prompt em [`prompts/gerar-env-docker.md`](prompts/gerar-env-docker.md).
-
-## Exemplos
+## Uso
 
 ```bash
-python .agents/skills/mssql-database/scripts/mssql_tool.py query --sql "SELECT TOP (5) name FROM sys.tables"
-python .agents/skills/mssql-database/scripts/mssql_tool.py execute --file minha_alteracao.sql
-# Com aprovação humana específica:
-python .agents/skills/mssql-database/scripts/mssql_tool.py execute --file minha_alteracao.sql --apply --ack confirmed
+# Testar conectividade:
+python3 scripts/mssql_tool.py --ping
+
+# Executar query:
+python3 scripts/mssql_tool.py --sql "SELECT TOP (10) name FROM sys.tables"
+
+# Executar a partir de arquivo:
+python3 scripts/mssql_tool.py --file script.sql
 ```
-
-## Atenção
-
-A prévia executa a instrução em transação e faz `ROLLBACK`; ela **não** é inofensiva (locks, gatilhos com efeitos externos etc.). `sqlcmd` e `pyodbc` dependem de ferramentas/drivers existentes no host e acesso TCP. Algumas instruções T-SQL não funcionam em uma transação ou exigem batches (`GO`) e são intencionalmente excluídas. Não foi realizado teste de integração com um SQL Server real. Consulte `SKILL.md` e `references/OPERATIONS.md`.

@@ -1,4 +1,2 @@
 python-dotenv>=1,<2
-sqlparse>=0.5,<1
-# Opcional se não houver sqlcmd compatível no host:
-# pyodbc>=5,<6
+pyodbc>=5,<6
